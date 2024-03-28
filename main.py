@@ -21,6 +21,7 @@ import pygame.font
 
 pg.init()
 pg.display.set_caption("Tetris in Python")
+pg.display.set_icon( pg.image.load("icon.png") )
 
 # Game settings
 BOARD_LENGTH = 10

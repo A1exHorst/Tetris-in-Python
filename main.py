@@ -36,6 +36,7 @@ SCREEN_HEIGHT = FIELD_SIZE * BOARD_HEIGHT
 SCREEN_COLOR = (32, 0, 64)
 screen = pg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 FALLSPEED_DEFAULT = 1000  # In milliseconds
+VOLUME = 0.1
 points = 0
 
 magicText_Offset = 0
@@ -43,7 +44,7 @@ magicText_speed = 5
 magicText_tick = 0
 
 holdingText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft.ttf"), FIELD_SIZE)
-holdingText_surface = holdingText_font.render("halten", True, (255, 255, 255))
+holdingText_surface = holdingText_font.render("holding", True, (255, 255, 255))
 points_labelText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft.ttf"), FIELD_SIZE)
 magicText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft-enchantment.ttf"), FIELD_SIZE)  # Wierd
 magicText = "Made By Alexander Horst "
@@ -58,6 +59,11 @@ formToColor = [(64, 64, 192),
                (128, 128, 0)]
 formToCenter = [2, 1, 2, 2, 2, 2, 0]
 
+
+def playSound(path: str):
+    sound = pg.mixer.Sound(path)
+    sound.set_volume(VOLUME)
+    sound.play()
 
 class Field:
     def __init__(self, x, y):
@@ -77,6 +83,8 @@ class Piece:
         self.switchedForm = False  # True if the player already selected the other block
 
     def spawnPiece(self, forBoard):
+        if self.form != None:
+            playSound("sounds/drop.mp3")
         self.form = random.randint(0, 6)
         self.dropPiece(forBoard)
         self.switchedForm = False
@@ -126,6 +134,7 @@ class Piece:
                 self.pos = [[5, 0], [4, 1], [5, 1], [6, 1]]
             else:
                 self.pos = [[4, 0], [5, 0], [4, 1], [5, 1]]
+
     def copy(self):
         copy = Piece()
         copy_pos = []
@@ -141,6 +150,7 @@ class Piece:
         copy.copyForm = self.copyForm
         copy.switchedForm = self.switchedForm
         return copy
+
 
 fields = []
 for x in range(BOARD_LENGTH):
@@ -170,6 +180,7 @@ ROTATIONPATTERN = ROTATIONPATTERN_DEFAULT
 run = True
 dropTick = pg.time.get_ticks()
 rotationTick = pg.time.get_ticks()
+
 
 def rotate(block, direction, careForCollision):
     if block.form != 6:
@@ -220,6 +231,8 @@ def rotate(block, direction, careForCollision):
                     collision = True
                     break
         if collision == False:
+            if careForCollision:
+                playSound("sounds/rotate.mp3")
             for i in range(len(block.pos)):
                 block.pos[i] = posList[i]
     return block
@@ -244,15 +257,20 @@ def bordersTouched():  # Checks if the block is touching the game borders
     return 0
 
 
-def hardBlockTouched():  # Checks if the block is touching (sideways) a hard block
-    for pos in fallingBlock.pos:
+def hardBlockTouched(block: Piece):  # Returns an array which tells you which sides are touched. 1 Means its touched
+    temp = [0, 0]
+
+    for pos in block.pos:
         if pos[0] != 0:
             if fields[pos[0] - 1][pos[1]].state == True:
-                return -1
+                temp = [1, temp[1]]
         if pos[0] != BOARD_LENGTH - 1:
             if fields[pos[0] + 1][pos[1]].state == True:
-                return 1
-    return 0
+                temp = [temp[0], 1]
+    return temp
+
+
+playSound("sounds/game_start.mp3")
 
 # In pygame, the game itself is always in a while loop
 while run:
@@ -331,7 +349,8 @@ while run:
                 if not pixelIsFromFallingBlock:
                     fields[x][y3].color = fields[x][y3 - 1].color
                     fields[x][y3].state = fields[x][y3 - 1].state
-
+    if len(linesClearedAtY) != 0:   # Play a sound if a line is cleared
+        playSound("sounds/clear.mp3")
     # Painting the Board, which is a chess like background but with a color fade
     for x in range(BOARD_LENGTH):
         for y in range(BOARD_HEIGHT):
@@ -357,14 +376,13 @@ while run:
 
     # Adds the Shadow block to the board
     shadowBlock = fallingBlock.copy()
-    shadowBlock.color = (shadowBlock.color[0]/3, shadowBlock.color[1]/3, shadowBlock.color[2]/3)
+    shadowBlock.color = (shadowBlock.color[0] / 3, shadowBlock.color[1] / 3, shadowBlock.color[2] / 3)  # Darker color
     while approachingImpact(shadowBlock) == 0:
         i = 0
         for pos in shadowBlock.pos:
             pos[1] = pos[1] + 1
             shadowBlock.pos[i] = pos
             i += 1
-
     for pos in shadowBlock.pos:
         fields[pos[0]][pos[1]].color = shadowBlock.color
 
@@ -416,14 +434,16 @@ while run:
     for event in pg.event.get():
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_LEFT:
-                if bordersTouched() != -1 and hardBlockTouched() != -1:
+                if bordersTouched() != -1 and hardBlockTouched(fallingBlock)[0] == 0:
+                    playSound("sounds/move.mp3")
                     i = 0
                     for pos in fallingBlock.pos:
                         pos[0] = pos[0] - 1
                         fallingBlock.pos[i] = pos
                         i += 1
             if event.key == pg.K_RIGHT:
-                if bordersTouched() != 1 and hardBlockTouched() != 1:
+                if bordersTouched() != 1 and hardBlockTouched(fallingBlock)[1] == 0:
+                    playSound("sounds/move.mp3")
                     i = 0
                     for pos in fallingBlock.pos:
                         pos[0] = pos[0] + 1
@@ -452,8 +472,6 @@ while run:
                 pg.quit()
             if event.key == pg.K_DOWN:
                 FALLSPEED = 50
-            if event.key == pg.K_s:
-                holdingBlock.spawnPiece(False)
         if event.type == pg.KEYUP:
             if event.key == pg.K_DOWN:
                 FALLSPEED = FALLSPEED_DEFAULT

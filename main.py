@@ -6,6 +6,8 @@ Controls:
     ←     →     - Move the piece to the left or to the right
        ↓        - Increases the falling speed of the block
      space      - Instantly puts the block on the ground
+       c        - Puts the current block on the Clipboard for later use
+                  using c again therefore switches the block with the block on the clipboard
 '''
 
 import os
@@ -43,9 +45,8 @@ magicText_tick = 0
 holdingText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft.ttf"), FIELD_SIZE)
 holdingText_surface = holdingText_font.render("halten", True, (255, 255, 255))
 points_labelText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft.ttf"), FIELD_SIZE)
-magicText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft-enchantment.ttf"),FIELD_SIZE)  # Seltsame Schrift auf der linken Seite des Bildschirms
+magicText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft-enchantment.ttf"), FIELD_SIZE)  # Wierd
 magicText = "Made By Alexander Horst "
-gameoverText_font = pygame.font.Font(os.path.join(os.getcwd(), "minecraft.ttf"), FIELD_SIZE*4)
 
 # Each block has its own color
 formToColor = [(64, 64, 192),
@@ -62,18 +63,18 @@ class Field:
     def __init__(self, x, y):
         self.rect = pg.Rect((x, y, FIELD_SIZE, FIELD_SIZE))
         self.color = (32, 0, 64)
-        self.state = False          # If True, the block is hard and interacts with the falling piece
+        self.state = False  # If True, the block is hard and interacts with the falling piece
 
 
 class Piece:
 
     def __init__(self):
-        self.pos = None             # The positions of each block
-        self.color = None           # The color of each block
-        self.center = None          # Center block around which the piece rotates
-        self.form = None            # Tells which kind of piece the block is
-        self.copyForm = None        # The form of the saved block
-        self.switchedForm = False   # True if the player already selected the other block
+        self.pos = None  # The positions of each block
+        self.color = None  # The color of each block
+        self.center = None  # Center block around which the piece rotates
+        self.form = None  # Tells which kind of piece the block is
+        self.copyForm = None  # The form of the saved block
+        self.switchedForm = False  # True if the player already selected the other block
 
     def spawnPiece(self, forBoard):
         self.form = random.randint(0, 6)
@@ -95,7 +96,7 @@ class Piece:
     def dropPiece(self, forBoard):
         self.color = formToColor[self.form]
         self.center = formToCenter[self.form]
-        if not forBoard:    # Block positions for the showcase
+        if not forBoard:  # Block positions for the showcase
             if self.form == 0:
                 self.pos = [[2, 1], [2, 2], [2, 3], [2, 4]]
             elif self.form == 1:
@@ -110,7 +111,7 @@ class Piece:
                 self.pos = [[2, 2], [1, 3], [2, 3], [3, 3]]
             else:
                 self.pos = [[1, 2], [2, 2], [1, 3], [2, 3]]
-        else:               # Block positions for the game board
+        else:  # Block positions for the game board
             if self.form == 0:
                 self.pos = [[4, 0], [4, 1], [4, 2], [4, 3]]
             elif self.form == 1:
@@ -125,7 +126,21 @@ class Piece:
                 self.pos = [[5, 0], [4, 1], [5, 1], [6, 1]]
             else:
                 self.pos = [[4, 0], [5, 0], [4, 1], [5, 1]]
-
+    def copy(self):
+        copy = Piece()
+        copy_pos = []
+        for i in range(len(self.pos)):
+            temp = []
+            for j in range(len(self.pos[i])):
+                temp.append(self.pos[i][j])
+            copy_pos.append(temp)
+        copy.pos = copy_pos
+        copy.color = self.color
+        copy.center = self.center
+        copy.form = self.form
+        copy.copyForm = self.copyForm
+        copy.switchedForm = self.switchedForm
+        return copy
 
 fields = []
 for x in range(BOARD_LENGTH):
@@ -144,7 +159,10 @@ for x in range(SHOWCASE_LENGTH):
 
 fallingBlock = Piece()
 holdingBlock = Piece()
+shadowBlock = Piece()
+
 fallingBlock.spawnPiece(True)
+
 FALLSPEED = FALLSPEED_DEFAULT
 ROTATIONSPEED = random.randint(500, 2000)
 ROTATIONPATTERN_DEFAULT = [0, 0, 0, 1, 1, 1]  # 0 = False(Counter Clockwise)   1 = True(Clockwise)
@@ -152,7 +170,6 @@ ROTATIONPATTERN = ROTATIONPATTERN_DEFAULT
 run = True
 dropTick = pg.time.get_ticks()
 rotationTick = pg.time.get_ticks()
-
 
 def rotate(block, direction, careForCollision):
     if block.form != 6:
@@ -208,8 +225,8 @@ def rotate(block, direction, careForCollision):
     return block
 
 
-def approachingImpact():  # returns 1 if Block is about to touch the Border or another Block
-    for pos in fallingBlock.pos:
+def approachingImpact(block: Piece):  # returns 1 if Block is about to touch the Border or another Block
+    for pos in block.pos:
         if pos[1] == BOARD_HEIGHT - 1:
             return 1
 
@@ -218,7 +235,7 @@ def approachingImpact():  # returns 1 if Block is about to touch the Border or a
     return 0
 
 
-def bordersTouched():
+def bordersTouched():  # Checks if the block is touching the game borders
     for pos in fallingBlock.pos:
         if pos[0] == 0:
             return -1
@@ -227,7 +244,7 @@ def bordersTouched():
     return 0
 
 
-def hardBlockTouched():
+def hardBlockTouched():  # Checks if the block is touching (sideways) a hard block
     for pos in fallingBlock.pos:
         if pos[0] != 0:
             if fields[pos[0] - 1][pos[1]].state == True:
@@ -237,26 +254,24 @@ def hardBlockTouched():
                 return 1
     return 0
 
-
+# In pygame, the game itself is always in a while loop
 while run:
     posX_array = []
     posY_array = []
-    for list in fallingBlock.pos:
-        posX_array.append(list[0])
-        posY_array.append(list[1])
-    fallingBlockPos = []
-    fallingBlockPos.append(posX_array)
-    fallingBlockPos.append(posY_array)
+    for temp in fallingBlock.pos:
+        posX_array.append(temp[0])
+        posY_array.append(temp[1])
+    fallingBlockPos = [posX_array, posY_array]  # Same information as fallingBlock.pos but in a different format
 
     if pg.time.get_ticks() - dropTick >= FALLSPEED:  # Drops the falling block one by one
         dropTick = pg.time.get_ticks()
-        if approachingImpact() == 0:    # The block is not approaching impact
+        if approachingImpact(fallingBlock) == 0:  # The block is not approaching impact
             i = 0
             for pos in fallingBlock.pos:
                 pos[1] = pos[1] + 1
                 fallingBlock.pos[i] = pos
                 i += 1
-        else:                           # The block fell on the ground or on another block, it hardens and tries to spawn another
+        else:  # The block fell on the ground or on another block, it hardens and tries to spawn another
             for pos in fallingBlock.pos:
                 fields[pos[0]][pos[1]].state = True
             fallingBlock.spawnPiece(True)
@@ -264,26 +279,27 @@ while run:
                 if fields[pos[0]][pos[1]].state == True:
                     run = False
 
-    if pg.time.get_ticks() - rotationTick >= ROTATIONSPEED and not holdingBlock.pos == None:  # Rotates the block in the holding slot, just cosmetic
+    # Rotates the block in the holding slot, this is just an overcomplicated cosmetic
+    if pg.time.get_ticks() - rotationTick >= ROTATIONSPEED and not holdingBlock.pos == None:
         ROTATIONSPEED = random.randint(500, 2000)
         rotationTick = pg.time.get_ticks()
         rd = random.randint(0, len(ROTATIONPATTERN) - 1)  # 6
         holdingBlock = rotate(holdingBlock, ROTATIONPATTERN[rd], False)
         countedZeros = 0
-        for dir in ROTATIONPATTERN:
-            if dir == 0:
+        for direction in ROTATIONPATTERN:
+            if direction == 0:
                 countedZeros += 1
         if not (countedZeros == 0 or countedZeros == 6):
             newPattern = []
             if ROTATIONPATTERN[rd]:
-                for newDir in range(len(ROTATIONPATTERN)):
-                    if newDir < countedZeros - 1:
+                for newDirection in range(len(ROTATIONPATTERN)):
+                    if newDirection < countedZeros - 1:
                         newPattern.append(0)
                     else:
                         newPattern.append(1)
             else:
-                for newDir in range(len(ROTATIONPATTERN)):
-                    if newDir < countedZeros + 1:
+                for newDirection in range(len(ROTATIONPATTERN)):
+                    if newDirection < countedZeros + 1:
                         newPattern.append(0)
                     else:
                         newPattern.append(1)
@@ -291,7 +307,7 @@ while run:
         else:
             ROTATIONPATTERN = ROTATIONPATTERN_DEFAULT
 
-    # Check for a full line
+    # This loop checks if there are any completed lines
     linesClearedAtY = []
     for y in range(BOARD_HEIGHT):
         lineIsComplete = True
@@ -300,7 +316,8 @@ while run:
                 lineIsComplete = False
         if lineIsComplete:
             linesClearedAtY.append(y)
-            points+=1                           # Each full line gives 1 point
+            points += 1  # Each full line gives 1 point
+    # This loop removes all completed lines and pulls the ones on top of it down
     for y in linesClearedAtY:
         for y2 in range(y + 1):
             y3 = y - y2
@@ -314,8 +331,9 @@ while run:
                 if not pixelIsFromFallingBlock:
                     fields[x][y3].color = fields[x][y3 - 1].color
                     fields[x][y3].state = fields[x][y3 - 1].state
-    #   Board screen
-    for x in range(BOARD_LENGTH):  # chess like background but with a color fade
+
+    # Painting the Board, which is a chess like background but with a color fade
+    for x in range(BOARD_LENGTH):
         for y in range(BOARD_HEIGHT):
             if fields[x][y].state == False:
                 if y // 2 - y / 2 == 0:
@@ -337,30 +355,51 @@ while run:
                                               FIELD_COLOR_BRIGHT[1] * ((255 - (255 / BOARD_HEIGHT) * y) / 255),
                                               FIELD_COLOR_BRIGHT[2] * ((255 - (255 / BOARD_HEIGHT) * y) / 255))
 
-    for pos in fallingBlock.pos:    # Prints the blocks colors on the board
+    # Adds the Shadow block to the board
+    shadowBlock = fallingBlock.copy()
+    shadowBlock.color = (shadowBlock.color[0]/3, shadowBlock.color[1]/3, shadowBlock.color[2]/3)
+    while approachingImpact(shadowBlock) == 0:
+        i = 0
+        for pos in shadowBlock.pos:
+            pos[1] = pos[1] + 1
+            shadowBlock.pos[i] = pos
+            i += 1
+
+    for pos in shadowBlock.pos:
+        fields[pos[0]][pos[1]].color = shadowBlock.color
+
+    # Changes the fields data based on where the falling block is
+    for pos in fallingBlock.pos:
         fields[pos[0]][pos[1]].color = fallingBlock.color
-    screen.fill(SCREEN_COLOR)
+
+    screen.fill(SCREEN_COLOR)  # Game background color
+
+    # Painting the whole game board
     for x in range(BOARD_LENGTH):
         for y in range(BOARD_HEIGHT):
             pg.draw.rect(screen, fields[x][y].color, fields[x][y])
-    #   Showcase screen
+
+    # This part is for the Showcase screen
+    # Background
     for x in range(SHOWCASE_LENGTH):
         for y in range(5):
             showcaseFields[x][y + 1].color = (16, 16, 16)
-
+    # The block on showcase
     if not holdingBlock.pos == None:
         for pos in holdingBlock.pos:
             showcaseFields[pos[0]][pos[1]].color = holdingBlock.color
-
+    # Printing the Showcase
     for x in range(SHOWCASE_LENGTH):
         for y in range(SHOWCASE_HEIGHT):
             pg.draw.rect(screen, showcaseFields[x][y].color, showcaseFields[x][y])
-    #   This area is about refreshing all the blocks and texts
+
+    # This area is about refreshing all the blocks and texts
     screen.blit(holdingText_surface, (FIELD_OFFSET_X + FIELD_SIZE * BOARD_LENGTH, 0))
     points_labelText_surface = points_labelText_font.render("points:", True, (255, 255, 255))
     screen.blit(points_labelText_surface, (FIELD_OFFSET_X + FIELD_SIZE * BOARD_LENGTH, FIELD_SIZE * 14))
     points_content_surface = points_labelText_font.render(str(points), True, (255, 255, 255))
     screen.blit(points_content_surface, (FIELD_OFFSET_X + FIELD_SIZE * BOARD_LENGTH, FIELD_SIZE * 15))
+    # For the magic Text on the left
     if pg.time.get_ticks() - magicText_tick >= magicText_speed:
         magicText_tick = pg.time.get_ticks()
         magicText_Offset += 1
@@ -373,7 +412,7 @@ while run:
     magicText_Border = Field(0, FIELD_SIZE * BOARD_HEIGHT)
     pg.draw.rect(screen, SCREEN_COLOR, magicText_Border)
 
-    #This area is about reading player input
+    # This area is about reading player input
     for event in pg.event.get():
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_LEFT:
@@ -391,7 +430,7 @@ while run:
                         fallingBlock.pos[i] = pos
                         i += 1
             if event.key == pg.K_SPACE:
-                while approachingImpact() == 0:
+                while approachingImpact(fallingBlock) == 0:
                     i = 0
                     for pos in fallingBlock.pos:
                         pos[1] = pos[1] + 1

@@ -1,6 +1,7 @@
 '''
 Tetris made with pygame by Alexander Horst
 Controls:
+      ESC       - Closes the Game
        y        - Rotates the piece counterclockwise
        ↑ or x   - Rotates the piece clockwise
     ←     →     - Move the piece to the left or to the right
